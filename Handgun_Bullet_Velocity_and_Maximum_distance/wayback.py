@@ -1,0 +1,136 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+from matplotlib.animation import FuncAnimation
+from matplotlib.widgets import Slider
+import math
+
+# Constants
+gravitational_acceleration = 9.81  # m/s²
+air_density = 1.225  # kg/m³
+horizontal_distance = 1546  # meters
+
+# Handgun data (initial velocities in m/s)
+handguns = [
+    {"name": "Glock 17", "initial_velocity": 343, "mass": 0.00745},
+    {"name": "Smith & Wesson M&P Shield", "initial_velocity": 300, "mass": 0.01166},
+    {"name": "Colt 1911", "initial_velocity": 259, "mass": 0.0149},
+    {"name": "SIG Sauer P226", "initial_velocity": 411, "mass": 0.00804},
+    {"name": "Ruger LCP II", "initial_velocity": 290, "mass": 0.00583},
+]
+
+# Function to calculate air resistance (drag force)
+def air_resistance_force(velocity, air_density):
+    C_d = 0.4  # Approximate drag coefficient for a bullet
+    A = 0.00007  # Approximate cross-sectional area of a typical bullet (in square meters)
+    return -0.5 * C_d * A * air_density * velocity ** 2
+
+# Function to define the ODEs for bullet motion with air resistance
+def bullet_odes(t, state, mass):
+    velocity_x, velocity_y, velocity_z, x, y, z = state
+    velocity = np.sqrt(velocity_x ** 2 + velocity_y ** 2 + velocity_z ** 2)
+    drag_force = air_resistance_force(velocity, air_density)
+
+    acceleration_x = -drag_force * velocity_x / (mass * velocity)
+    acceleration_y = -drag_force * velocity_y / (mass * velocity)
+    acceleration_z = -drag_force * velocity_z / (mass * velocity) - gravitational_acceleration
+
+    return [acceleration_x, acceleration_y, acceleration_z, velocity_x, velocity_y, velocity_z]
+
+# Function to simulate the bullet trajectory with air resistance using ODE solver
+def simulate_trajectory(mass, muzzle_velocity, firing_angle_degrees):
+    firing_angle_radians = math.radians(firing_angle_degrees)
+    launch_velocity_x = 0
+    launch_velocity_y = 0
+    launch_velocity_z = muzzle_velocity * np.cos(firing_angle_radians)
+    launch_velocity_horizontal = muzzle_velocity * np.sin(firing_angle_radians)
+
+    initial_state = [launch_velocity_x, launch_velocity_y, launch_velocity_z, 0, 0, 0]
+    t_span = (0, 20)
+    sol = solve_ivp(bullet_odes, t_span, initial_state, args=(mass,), method='RK45', t_eval=np.linspace(t_span[0], t_span[1], 1000))
+
+    return sol.y[3], sol.y[4], sol.y[5]
+
+# Function to check if an object is injured (reaches a specific height threshold and crosses it)
+def is_injured(x_values, z_values, target_height, target_distance):
+    # Check if the bullet trajectory crosses the target_height at any horizontal distance
+    for i in range(len(z_values) - 1):
+        if (z_values[i] - target_height) * (z_values[i + 1] - target_height) <= 0 and x_values[i] <= target_distance:
+            return True
+
+    return False
+
+# Function to calculate maximum height and maximum horizontal distance
+def calculate_max_height_distance(initial_velocity, firing_angle_degrees):
+    firing_angle_radians = math.radians(firing_angle_degrees)
+    max_height = (initial_velocity ** 2) * (np.sin(firing_angle_radians) ** 2) / (2 * gravitational_acceleration)
+    max_distance = (initial_velocity ** 2) * np.sin(2 * firing_angle_radians) / gravitational_acceleration
+    return max_height, max_distance
+
+# Animation function for updating the 3D plot with interactive elements
+def animate_trajectory(i, target_height, target_distance, firing_angle_degrees):
+    ax.cla()
+    ax.set_xlim(0, horizontal_distance)
+    ax.set_ylim(0, horizontal_distance)
+    ax.set_zlim(0, 200)  # Setting a fixed height range for better visualization
+    ax.set_xlabel("Horizontal Distance (m)")
+    ax.set_ylabel("Horizontal Distance (m)")  # Fixing the label for y-axis
+    ax.set_zlabel("Vertical Distance (m)")  # Fixing the label for z-axis
+    ax.set_title(f"{handguns[i]['name']} Bullet Trajectory")
+
+    initial_velocity = handguns[i]['initial_velocity']
+    x, y, z = simulate_trajectory(handguns[i]['mass'], initial_velocity, firing_angle_degrees)
+
+    # Check if the object is injured
+    injured = is_injured(x, z, target_height, target_distance)
+
+    ax.plot(x, y, z, label="Trajectory", linestyle='-', marker='o', markersize=3)
+    ax.scatter(target_distance, target_distance, target_height, color='red', marker='o', label="Target")
+
+    if injured:
+        # Use text2D to display text on the 2D canvas (screen)
+        ax.text2D(0.5, 0.5, "INJURED!", color='red', fontsize=12, transform=ax.transAxes)
+
+    ax.legend()
+
+    # Calculate and display maximum height and horizontal distance
+    max_height, max_distance = calculate_max_height_distance(initial_velocity, firing_angle_degrees)
+    ax.text2D(0.05, 0.9, f"Max Height: {max_height:.2f} meters", fontsize=12, transform=ax.transAxes)
+    ax.text2D(0.05, 0.85, f"Max Distance: {max_distance:.2f} meters", fontsize=12, transform=ax.transAxes)
+
+    ax.grid()
+
+
+# Create the 3D animation with interactive elements
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Add slider for target height
+height_slider_ax = plt.axes([0.1, 0.01, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+height_slider = Slider(height_slider_ax, 'Target Height (m)', 0, 200, valinit=50)
+
+# Add slider for target distance
+distance_slider_ax = plt.axes([0.1, 0.06, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+distance_slider = Slider(distance_slider_ax, 'Target Distance (m)', 0, 1546, valinit=1546)
+
+# Add slider for firing angle
+angle_slider_ax = plt.axes([0.1, 0.11, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+angle_slider = Slider(angle_slider_ax, 'Firing Angle (degrees)', 0, 90, valinit=0)
+
+# Update the plot when the sliders are changed
+def update(val):
+    target_height = height_slider.val
+    target_distance = distance_slider.val
+    firing_angle_degrees = angle_slider.val
+    animate_trajectory(i, target_height, target_distance, firing_angle_degrees)
+
+height_slider.on_changed(update)
+distance_slider.on_changed(update)
+angle_slider.on_changed(update)
+
+# Create the animation for each handgun
+for i in range(len(handguns)):
+    animate_trajectory(i, 50, 1546, 0)  # Starting with a target height of 50 meters, 1546 meters distance, and firing angle of 0 degrees (vertical)
+
+plt.show()
+
