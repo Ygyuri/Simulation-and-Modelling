@@ -49,9 +49,14 @@ def simulate_trajectory(mass, muzzle_velocity, launch_angle):
 
     return sol.y[3], sol.y[4], sol.y[5]
 
-# Function to check if an object is injured (reaches a specific height threshold)
+# Function to check if an object is injured (reaches a specific height threshold and crosses it)
 def is_injured(z_values, target_height):
-    return any(z >= target_height for z in z_values)
+     # Check if the bullet trajectory crosses the target_height
+    for i in range(len(z_values) - 1):
+        if (z_values[i] - target_height) * (z_values[i + 1] - target_height) <= 0:
+            return True
+
+    return False
 
 # Function to calculate maximum height and maximum horizontal distance
 def calculate_max_height_distance(initial_velocity, launch_angle):
