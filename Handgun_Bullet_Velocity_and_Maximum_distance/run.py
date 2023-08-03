@@ -36,6 +36,12 @@ def bullet_odes(t, state, mass):
     acceleration_y = -drag_force * velocity_y / (mass * velocity)
     acceleration_z = -drag_force * velocity_z / (mass * velocity) - gravitational_acceleration
 
+     # Special handling for vertical launch
+    if velocity_x == 0 and velocity_y == 0 and velocity_z == 0:
+        acceleration_z = 0  # Set vertical acceleration to 0 for vertical firing
+    else:
+        acceleration_z = -drag_force * velocity_z / (mass * velocity) - gravitational_acceleration
+
     return [acceleration_x, acceleration_y, acceleration_z, velocity_x, velocity_y, velocity_z]
 
 # Function to simulate the bullet trajectory with air resistance using ODE solver
